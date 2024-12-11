@@ -72,9 +72,11 @@ def run_models(X, y, models, param_grids, preprocessor, seed=42):
         best_hyperparameters[name] = {hp: hp_values[hp] for hp in hp_list}
         best_hp_str = "\n".join(f"{hp}: {hp_values[hp]}".title() for hp in hp_list)
 
-        y_pred = best_model.predict(X_test)
-        y_pred_proba = best_model.predict_proba(X_test)[:, 1]
-        
+        with warnings.catch_warnings():
+            warnings.simplefilter("ignore")
+            y_pred = best_model.predict(X_test)
+            y_pred_proba = best_model.predict_proba(X_test)[:, 1]
+            
         auc = roc_auc_score(y_test, y_pred_proba)
         acc = accuracy_score(y_test, y_pred)
 
