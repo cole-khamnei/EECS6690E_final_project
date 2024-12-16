@@ -4,6 +4,7 @@ import pandas as pd
 import numpy as np
 import seaborn as sns
 import matplotlib.pyplot as plt
+import dataframe_image as dfi
 
 from sklearn.model_selection import train_test_split, GridSearchCV
 from sklearn.preprocessing import StandardScaler, OneHotEncoder
@@ -16,9 +17,68 @@ from sklearn.tree import DecisionTreeClassifier
 from sklearn.ensemble import RandomForestClassifier
 from sklearn.neural_network import MLPClassifier
 
-from tqdm.auto import tqdm
+from sklearn.linear_model import LogisticRegression
+from sklearn.ensemble import AdaBoostClassifier
+from sklearn.naive_bayes import GaussianNB
+from sklearn.naive_bayes import CategoricalNB
 
+from sklearn.discriminant_analysis import QuadraticDiscriminantAnalysis as QDA
+from sklearn.discriminant_analysis import LinearDiscriminantAnalysis as LDA
+
+from tqdm.auto import tqdm
 import constants
+
+
+# Models to evaluate
+PAPER_MODELS = {
+    "KNN": KNeighborsClassifier(),
+    "SVM": SVC(probability=True),
+    "DecisionTree": DecisionTreeClassifier(),
+    "RandomForest": RandomForestClassifier(),
+    "ANN": MLPClassifier(),
+}
+
+# Hyperparameters for GridSearch
+PAPER_PARAM_GRIDS = {
+    "KNN": {"classifier__n_neighbors": np.arange(3, 10), "classifier__weights": ["uniform", "distance"]},
+    "SVM": {"classifier__C": np.logspace(-2, 0, 3),
+            "classifier__kernel": ["linear", "rbf"],
+            "classifier__class_weight": ["balanced", None],
+            "classifier__gamma": ["scale", "auto"],
+            },
+    "DecisionTree": {"classifier__max_depth": np.arange(3, 10),
+                     "classifier__criterion": ["gini", "entropy"],
+                     "classifier__class_weight": ["balanced", None],
+                     "classifier__max_features": ["sqrt", "log2", None], # no 'auto' option for DT in Sklearn
+                     },
+
+    "RandomForest": {"classifier__n_estimators": [50, 100],
+                     "classifier__max_depth": [3, 5, 10],
+                     "classifier__criterion": ["gini", "entropy"],
+                     "classifier__class_weight": ["balanced", None],
+                     "classifier__max_features": ["sqrt", "log2", None], # no 'auto' option for DT in Sklearn
+                     },
+
+    "ANN": {"classifier__hidden_layer_sizes": [(50,), (100,), (50, 50)],
+            # "classifier__activation": ["relu", "tanh"],
+            # "classifier__dropout": np.linspace(0, 1, 10)},
+            # "classifier__solver": ["adam", "sgd"],
+            # "classifier__learning_rate_init": np.logspace(-4, 0, 5),
+            # "classifier__max_iter": np.logspace(1, 3, 3).astype(int),
+            }
+}
+
+
+NEW_MODELS = {
+    "LR": LogisticRegression(),
+    "AdaBoost": AdaBoostClassifier(),
+}
+
+NEW_PARAM_GRIDS = {
+    "LR": {"classifier__class_weight": ["balanced", None]},
+    "AdaBoost": {"classifier__n_estimators": [50, 100, 150, 200]}, #, "classifier__max_depth": [1, 2, 3],},
+    "LDA": {"classifier__shrinkage": [None, "auto"]},
+}
 
 
 # ----------------------------------------------------------------------------# 
@@ -96,6 +156,32 @@ def run_models(X, y, models, param_grids, preprocessor, seed=42):
     return results, best_hyperparameters
 
 
+# \section run_models
+
+def run_model_and_feature_sets(X_df, y, feature_sets, models, param_grids):
+    """ """
+    pdf_set, hp_set = [], []
+    feature_set_results = {}
+    for feature_set_name, feature_set_list in feature_sets.items():
+        print(f"Running models for feature set: {feature_set_name}")
+        
+        X = X_df[feature_set_list]
+        feature_set_preprocessor = make_preprocessor(X)
+        results_i, hp_i = run_models(X, y, models, param_grids, feature_set_preprocessor)
+        feature_set_results[feature_set_name] = results_i
+        pdf = pd.DataFrame(feature_set_results[feature_set_name]).T
+        pdf["Feature Set"] = feature_set_name
+        pdf_set.append(pdf)
+        hp_set.append(hp_i)
+
+    pdf = pd.concat(pdf_set).drop(columns=["Classification Report", "Best Hyperparameters"])
+    pdf.set_index('Feature Set', append=True, inplace=True)
+    pdf.sort_index(inplace=True)
+    pdf = (pdf * 100).astype(str).applymap(lambda x: x[:5]) + "%"
+    
+    return pdf, hp_set
+
+
 # ----------------------------------------------------------------------------# 
 # --------------------                Main                --------------------# 
 # ----------------------------------------------------------------------------# 
@@ -108,78 +194,24 @@ def main():
     raw_thyroid_df.rename(columns={'Hx Radiothreapy': 'Hx Radiotherapy'}, inplace=True)
     raw_thyroid_df.columns = [c.lower().strip().replace(" ", "_") for c in raw_thyroid_df.columns]
 
-    # Models to evaluate
-    models = {
-        "KNN": KNeighborsClassifier(),
-        "SVM": SVC(probability=True),
-        "DecisionTree": DecisionTreeClassifier(),
-        "RandomForest": RandomForestClassifier(),
-        "ANN": MLPClassifier(),
-    }
+    y = raw_thyroid_df["recurred"]
+    X_df = raw_thyroid_df
 
-    # Hyperparameters for GridSearch
-    param_grids = {
-        "KNN": {"classifier__n_neighbors": np.arange(3, 10), "classifier__weights": ["uniform", "distance"]},
-        "SVM": {"classifier__C": np.logspace(-2, 0, 3),
-                "classifier__kernel": ["linear", "rbf"],
-                "classifier__class_weight": ["balanced", None],
-                "classifier__gamma": ["scale", "auto"],
-                },
-        "DecisionTree": {"classifier__max_depth": np.arange(3, 10),
-                         "classifier__criterion": ["gini", "entropy"],
-                         "classifier__class_weight": ["balanced", None],
-                         "classifier__max_features": ["sqrt", "log2", None], # no 'auto' option for DT in Sklearn
-                         },
-
-        "RandomForest": {"classifier__n_estimators": [50, 100],
-                         "classifier__max_depth": [3, 5, 10],
-                         "classifier__criterion": ["gini", "entropy"],
-                         "classifier__class_weight": ["balanced", None],
-                         "classifier__max_features": ["sqrt", "log2", None], # no 'auto' option for DT in Sklearn
-                         },
-
-        "ANN": {"classifier__hidden_layer_sizes": [(50,), (100,), (50, 50)],
-                # "classifier__activation": ["relu", "tanh"],
-                # "classifier__dropout": np.linspace(0, 1, 10)},
-                # "classifier__solver": ["adam", "sgd"],
-                # "classifier__learning_rate_init": np.logspace(-4, 0, 5),
-                # "classifier__max_iter": np.logspace(1, 3, 3).astype(int),
-                }
-    }
-
-    FEATURE_SETS = {
+    feature_sets = {
         "ATA Risk": ["risk"],
         "ATA Risk Excluded": [col for col in raw_thyroid_df.columns if col not in ["risk", "recurred"]],
         "Full": [col for col in raw_thyroid_df.columns if col != "recurred"]
     }
 
-    y = raw_thyroid_df["recurred"]
 
+    paper_model_results, paper_hp_set = run_model_and_feature_sets(X_df, y, feature_sets, PAPER_MODELS, PAPER_PARAM_GRIDS)
+    dfi.export(paper_model_results, "paper_model_results_table.png")
 
-    pdf_set = []
-    feature_set_results = {}
-    for feature_set_name, feature_set_list in FEATURE_SETS.items():
-        print(f"Running models for feature set: {feature_set_name}")
-        
-        X = raw_thyroid_df[feature_set_list]
-        feature_set_preprocessor = make_preprocessor(X)
-        results_i, hp_i = run_models(X, y, models, param_grids, feature_set_preprocessor)
-        feature_set_results[feature_set_name] = results_i
-        pdf = pd.DataFrame(feature_set_results[feature_set_name]).T
-        pdf["feature set"] = feature_set_name
-        pdf_set.append(pdf)
+    new_model_results, new_hp_set = run_model_and_feature_sets(X_df, y, feature_sets, NEW_MODELS, NEW_PARAM_GRIDS)
+    dfi.export(new_model_results, "new_model_results_table.png")
 
-    results = feature_set_results["Full"]
-    # Display results
-
-    pdf = pd.concat(pdf_set).drop(columns="Classification Report")
-    pdf.set_index('feature set', append=True, inplace=True)
-    pdf.sort_index(inplace=True)
-    pdf = (pdf * 100).round(decimals=2)
-    
-    print(pdf)
-
-    print(hp_i)
+    print(new_model_results)
+    print(new_hp_set[0])
 
 # # Visualization of feature importance for Random Forest
 # best_rf = models["RandomForest"]
