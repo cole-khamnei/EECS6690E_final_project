@@ -35,8 +35,8 @@ PAPER_MODELS = {
     "KNN": KNeighborsClassifier(),
     "SVM": SVC(probability=True),
     "DecisionTree": DecisionTreeClassifier(),
-    # "RandomForest": RandomForestClassifier(),
-    # "ANN": MLPClassifier(),
+    "RandomForest": RandomForestClassifier(),
+    "ANN": MLPClassifier(),
 }
 
 # Hyperparameters for GridSearch
@@ -61,11 +61,11 @@ PAPER_PARAM_GRIDS = {
                      },
 
     "ANN": {"classifier__hidden_layer_sizes": [(50,), (100,), (50, 50)],
-            # "classifier__activation": ["relu", "tanh"],
-            # "classifier__dropout": np.linspace(0, 1, 10)},
-            # "classifier__solver": ["adam", "sgd"],
-            # "classifier__learning_rate_init": np.logspace(-4, 0, 5),
-            # "classifier__max_iter": np.logspace(1, 3, 3).astype(int),
+            "classifier__activation": ["relu", "tanh"],
+            "classifier__dropout": np.linspace(0, 1, 10)},
+            "classifier__solver": ["adam", "sgd"],
+            "classifier__learning_rate_init": np.logspace(-4, 0, 5),
+            "classifier__max_iter": np.logspace(1, 3, 3).astype(int),
             }
 }
 
